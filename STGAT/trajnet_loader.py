@@ -4,14 +4,34 @@ import torch
 import trajnetplusplustools
 
 
-def trajnet_loader(data_loader, args):
+def pre_process_test(sc_, obs_len=8):
+    obs_frames = [primary_row.frame for primary_row in sc_[0]][:obs_len]
+    last_frame = obs_frames[-1]
+    sc_ = [[row for row in ped] for ped in sc_ if ped[0].frame <= last_frame]
+    return sc_
+
+
+def drop_distant(xy, r=6.0):
+    """
+    Drops pedestrians more than r meters away from primary ped
+    """
+    distance_2 = np.sum(np.square(xy - xy[:, 0:1]), axis=2)
+    mask = np.nanmin(distance_2, axis=0) < r**2
+    return xy[:, mask]
+
+
+def trajnet_loader(data_loader, args, drop_distant_ped=False, test=False):
     obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel = [], [], [], []
     loss_mask, seq_start_end = [], []
     non_linear_ped = torch.Tensor([]) # dummy
     num_batches = 0
     for batch_idx, (filename, scene_id, paths) in enumerate(data_loader):
+        if test:
+            paths = pre_process_test(paths, args.obs_len)
         ## Get new scene
         pos_scene = trajnetplusplustools.Reader.paths_to_xy(paths)
+        if drop_distant_ped:
+            pos_scene = drop_distant(pos_scene)
         # Removing Partial Tracks. Model cannot account for it !! NaNs in Loss
         full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0)
         pos_scene = pos_scene[:, full_traj]
@@ -20,6 +40,7 @@ def trajnet_loader(data_loader, args):
         vel_scene[1:] = pos_scene[1:] - pos_scene[:-1]
 
         # STGAT Model needs atleast 2 pedestrians per scene.
+        # if sum(full_traj) > 1 and (scene_id in type3_dict[filename]):
         if sum(full_traj) > 1:
             # Get Obs, Preds attributes
             obs_traj.append(torch.Tensor(pos_scene[:args.obs_len]))

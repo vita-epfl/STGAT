@@ -174,7 +174,6 @@ def evaluate(args, loader, generator):
             s_topk_ade, s_topk_fde = trajnet_batch_multi_eval(multi_traj_fake,
                                         pred_traj_gt.cpu().numpy().transpose(1, 0, 2), 
                                         seq_start_end.cpu().numpy())
-            print(s_ade, s_fde, s_topk_ade, s_topk_fde)
             topk_ade += s_topk_ade
             topk_fde += s_topk_fde
 
@@ -192,8 +191,8 @@ def main(args):
     checkpoint = torch.load(args.resume)
     generator = get_generator(checkpoint)
 
-    test_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/val/', sample=args.sample)
-    traj_test_loader = trajnet_loader(test_loader, args)
+    test_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/test_private/', sample=args.sample)
+    traj_test_loader = trajnet_loader(test_loader, args, test=True)
     ade, fde, pred_col, gt_col, topk_ade, topk_fde = evaluate(args, traj_test_loader, generator)
     print(
         "Dataset: {}, Pred Len: {}, ADE: {:.3f}, FDE: {:.3f}, Pred: {:.3f}, GT: {:.3f}, Topk ADE: {:.3f}, Topk FDE: {:.3f}".format(

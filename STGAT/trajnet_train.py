@@ -39,7 +39,7 @@ parser.add_argument("--skip", default=1, type=int)
 
 parser.add_argument("--seed", type=int, default=72, help="Random seed.")
 parser.add_argument("--batch_size", default=64, type=int)
-parser.add_argument("--num_epochs", default=400, type=int)
+parser.add_argument("--num_epochs", default=100, type=int)
 
 parser.add_argument("--noise_dim", default=(16,), type=int_tuple)
 parser.add_argument("--noise_type", default="gaussian")
@@ -128,6 +128,7 @@ def main(args):
     # train_dset, train_loader = data_loader(args, train_path)
     # logging.info("Initializing val dataset")
     # _, val_loader = data_loader(args, val_path)
+    print("Dataset: ", args.dataset_name)
     train_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/train/', sample=args.sample)
     val_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/val/', sample=args.sample)
 
@@ -186,16 +187,16 @@ def main(args):
 
     training_step = 1
     for epoch in range(args.start_epoch, args.num_epochs + 1):
-        if epoch < 15:
+        if epoch < 30:
             training_step = 1
-        elif epoch < 25:
+        elif epoch < 60:
             training_step = 2
         else:
-            if epoch == 25:
+            if epoch == 60:
                 for param_group in optimizer.param_groups:
                     param_group["lr"] = 5e-3
             training_step = 3
-        traj_train_loader = trajnet_loader(train_loader, args)          # Wrap Around TrajNet++ loader
+        traj_train_loader = trajnet_loader(train_loader, args, True)          # Wrap Around TrajNet++ loader
         train(args, model, traj_train_loader, optimizer, epoch, training_step, writer)
         if training_step == 3:
             traj_val_loader =  trajnet_loader(val_loader, args)          # Wrap Around TrajNet++ loader
@@ -211,7 +212,7 @@ def main(args):
                     "optimizer": optimizer.state_dict(),
                 },
                 is_best,
-                f"./checkpoint/checkpoint{epoch}.pth.tar",
+                f"./checkpoint/checkpoint{epoch}_{args.dataset_name}.pth.tar",
             )
     writer.close()
 
