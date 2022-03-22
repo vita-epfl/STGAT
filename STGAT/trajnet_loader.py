@@ -20,7 +20,58 @@ def drop_distant(xy, r=6.0):
     return xy[:, mask]
 
 
-def trajnet_loader(data_loader, args, drop_distant_ped=False, test=False):
+def fill_missing_observations(pos_scene_raw, obs_len):
+    """
+    Performs the following:
+        - discards pedestrians that are completely absent in 0 -> obs_len
+        - discards pedestrians that have any NaNs after obs_len
+        - In 0 -> obs_len:
+            - finds FIRST non-NaN and fill the entries to its LEFT with it
+            - finds LAST non-NaN and fill the entries to its RIGHT with it
+    """
+
+    # Discarding pedestrians that are completely absent in 0 -> obs_len
+    peds_are_present_in_obs = \
+        np.isfinite(pos_scene_raw).all(axis=2)[:obs_len, :].any(axis=0)
+    pos_scene = pos_scene_raw[:, peds_are_present_in_obs, :]
+
+    # Discarding pedestrians that have NaNs after obs_len
+    peds_are_absent_after_obs = \
+        np.isfinite(pos_scene).all(axis=2)[obs_len:, :].all(axis=0)
+    pos_scene = pos_scene[:, peds_are_absent_after_obs, :]
+
+    # Finding indices of finite frames per pedestrian
+    finite_frame_inds, finite_ped_inds = \
+        np.where(np.isfinite(pos_scene[:obs_len]).all(axis=2))
+    finite_frame_inds, finite_ped_inds = \
+        finite_frame_inds[np.argsort(finite_ped_inds)], np.sort(finite_ped_inds)
+
+    finite_frame_inds_per_ped = np.split(
+        finite_frame_inds, np.unique(finite_ped_inds, return_index=True)[1]
+        )[1:]
+
+    # Taking the indices of first and last finite frames per pedestrian
+    first_frame_inds = [np.min(frames) for frames in finite_frame_inds_per_ped]
+    last_frame_inds = [np.max(frames) for frames in finite_frame_inds_per_ped]
+
+    # Filling missing frames
+    for ped_ind in range(pos_scene.shape[1]):
+        first_frame = first_frame_inds[ped_ind]
+        last_frame = last_frame_inds[ped_ind]
+
+        pos_scene[:first_frame, ped_ind] = pos_scene[first_frame, ped_ind]
+        pos_scene[last_frame:obs_len, ped_ind] = pos_scene[last_frame, ped_ind]
+
+    return pos_scene
+
+
+def trajnet_loader(
+    data_loader, 
+    args, 
+    drop_distant_ped=False, 
+    test=False, 
+    fill_missing_obs=False
+    ):
     obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel = [], [], [], []
     loss_mask, seq_start_end = [], []
     non_linear_ped = torch.Tensor([]) # dummy
@@ -28,13 +79,25 @@ def trajnet_loader(data_loader, args, drop_distant_ped=False, test=False):
     for batch_idx, (filename, scene_id, paths) in enumerate(data_loader):
         if test:
             paths = pre_process_test(paths, args.obs_len)
+        
         ## Get new scene
         pos_scene = trajnetplusplustools.Reader.paths_to_xy(paths)
         if drop_distant_ped:
             pos_scene = drop_distant(pos_scene)
-        # Removing Partial Tracks. Model cannot account for it !! NaNs in Loss
+
+        ####################
+        # Needed for later; should be moved to the else branch when the minimum
+        # of 2 pedestrians per scene constraint is lifted
         full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0)
-        pos_scene = pos_scene[:, full_traj]
+        ####################
+
+        if fill_missing_obs:
+            pos_scene = fill_missing_observations(pos_scene, args.obs_len)
+        else:
+            # Removing Partial Tracks. Model cannot account for it !! NaNs in Loss
+            # full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0) ######
+            pos_scene = pos_scene[:, full_traj]
+        
         # Make Rel Scene
         vel_scene = np.zeros_like(pos_scene)
         vel_scene[1:] = pos_scene[1:] - pos_scene[:-1]
