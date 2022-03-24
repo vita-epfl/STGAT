@@ -20,6 +20,52 @@ def drop_distant(xy, r=6.0):
     return xy[:, mask]
 
 
+def get_limits_of_missing_intervals(finite_frame_inds, obs_len):
+    """
+    Given a SORTED array of indices of finite frames per pedestrian, get the 
+    indices which represent limits of NaN (missing) intervals in the array.
+    Example (for one pedestrian):
+        array = [3, 4, 5, 8, 9, 10, 13, 14, 15, 18]
+        obs_len = 18
+
+        ==>> result = [0, 3, 5, 8, 10, 13, 15, 18]
+    The resulting array is an array with an even number of elements,
+    because it represents pairs of start-end indices (i.e. limits) for 
+    intervals that should be padded. 
+        ==>> intervals to be padded later: [0, 3], [5, 8], [10, 13], [15, 18]
+    """
+    # Adding start and end indices
+    if 0 not in finite_frame_inds:
+        finite_frame_inds = np.insert(finite_frame_inds, 0, -1) 
+    if obs_len not in finite_frame_inds:
+        finite_frame_inds = \
+            np.insert(finite_frame_inds, len(finite_frame_inds), obs_len)
+
+    # Keeping only starts and ends of continuous intervals
+    limits, interval_len = [], 1
+    for i in range(1, len(finite_frame_inds)):
+        # If this element isn't the immediate successor of the previous
+        if finite_frame_inds[i] > finite_frame_inds[i - 1] + 1:
+            if interval_len:
+                # Add the end of the previous interval
+                if finite_frame_inds[i - 1] == -1:
+                    limits.append(0)
+                else:
+                    limits.append(finite_frame_inds[i - 1])
+                # Add the start of the new interval
+                limits.append(finite_frame_inds[i])
+                # If this is a lone finite element, add the next interval
+                if interval_len == 1 and i != len(finite_frame_inds) - 1 \
+                    and finite_frame_inds[i + 1] > finite_frame_inds[i] + 1:
+                    limits.append(finite_frame_inds[i])
+                    limits.append(finite_frame_inds[i + 1])
+            interval_len = 0
+        else:
+            interval_len += 1
+            
+    return limits
+
+
 def fill_missing_observations(pos_scene_raw, obs_len):
     """
     Performs the following:
@@ -49,18 +95,32 @@ def fill_missing_observations(pos_scene_raw, obs_len):
     finite_frame_inds_per_ped = np.split(
         finite_frame_inds, np.unique(finite_ped_inds, return_index=True)[1]
         )[1:]
-
-    # Taking the indices of first and last finite frames per pedestrian
-    first_frame_inds = [np.min(frames) for frames in finite_frame_inds_per_ped]
-    last_frame_inds = [np.max(frames) for frames in finite_frame_inds_per_ped]
+    finite_frame_inds_per_ped = \
+        [np.sort(frames) for frames in finite_frame_inds_per_ped]
 
     # Filling missing frames
-    for ped_ind in range(pos_scene.shape[1]):
-        first_frame = first_frame_inds[ped_ind]
-        last_frame = last_frame_inds[ped_ind]
+    for ped_ind in range(len(finite_frame_inds_per_ped)):
+        curr_finite_frame_inds = finite_frame_inds_per_ped[ped_ind]
 
-        pos_scene[:first_frame, ped_ind] = pos_scene[first_frame, ped_ind]
-        pos_scene[last_frame:obs_len, ped_ind] = pos_scene[last_frame, ped_ind]
+        # limits_of_cont_ints: [start_1, end_1, start_2, end_2, ... ]
+        limits_of_missing_ints = \
+            get_limits_of_missing_intervals(curr_finite_frame_inds, obs_len)
+        assert len(limits_of_missing_ints) % 2 == 0
+            
+        i = 0
+        while i < len(limits_of_missing_ints):
+            start_ind, end_ind = \
+                limits_of_missing_ints[i], limits_of_missing_ints[i + 1]
+            # If it's the beginning:
+            #   - pad with the right limit, else use left
+            #   - include start_ind, else exclude it
+            # WARNING: the order of these commands is important due to 
+            # start_ind changing its value
+            padding_ind = end_ind if start_ind == 0 else start_ind
+            start_ind = start_ind if start_ind == 0 else start_ind + 1
+            
+            pos_scene[start_ind:end_ind, ped_ind] = pos_scene[padding_ind, ped_ind]
+            i += 2
 
     return pos_scene
 
