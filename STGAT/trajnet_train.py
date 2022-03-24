@@ -10,7 +10,6 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
 import utils
-from data.loader import data_loader
 from models import TrajectoryGenerator
 from utils import (
     displacement_error,
@@ -129,8 +128,12 @@ def main(args):
     # logging.info("Initializing val dataset")
     # _, val_loader = data_loader(args, val_path)
     print("Dataset: ", args.dataset_name)
-    train_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/train/', sample=args.sample)
-    val_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/val/', sample=args.sample)
+    train_loader, _, _ = prepare_data(
+        'datasets/' + args.dataset_name, subset='/train/', sample=args.sample
+        )
+    val_loader, _, _ = prepare_data(
+        'datasets/' + args.dataset_name, subset='/val/', sample=args.sample
+        )
 
     ## TrajNet++ Edit ################################################################################################
 
@@ -196,8 +199,11 @@ def main(args):
                 for param_group in optimizer.param_groups:
                     param_group["lr"] = 5e-3
             training_step = 3
+
         traj_train_loader = trajnet_loader(train_loader, args, True)          # Wrap Around TrajNet++ loader
+        
         train(args, model, traj_train_loader, optimizer, epoch, training_step, writer)
+        
         if training_step == 3:
             traj_val_loader =  trajnet_loader(val_loader, args)          # Wrap Around TrajNet++ loader
             ade = validate(args, model, traj_val_loader, epoch, writer)
@@ -212,8 +218,9 @@ def main(args):
                     "optimizer": optimizer.state_dict(),
                 },
                 is_best,
-                f"./checkpoint/checkpoint{epoch}_{args.dataset_name}.pth.tar",
-            )
+                f"./models/{args.dataset_name}/checkpoint_epoch_{epoch}.pth.tar",
+                )
+
     writer.close()
 
 
@@ -330,16 +337,19 @@ def cal_ade_fde(pred_traj_gt, pred_traj_fake):
 
 
 def save_checkpoint(state, is_best, filename="checkpoint.pth.tar"):
+    checkpoint_dir = os.path.dirname(filename)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
     if is_best:
         torch.save(state, filename)
         logging.info("-------------- lower ade ----------------")
-        shutil.copyfile(filename, "model_best.pth.tar")
+        shutil.copyfile(
+            filename, os.path.join(checkpoint_dir, "model_best.pth.tar")
+            )
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     utils.set_logger(os.path.join(args.log_dir, "train.log"))
-    checkpoint_dir = "./checkpoint"
-    if os.path.exists(checkpoint_dir) is False:
-        os.mkdir(checkpoint_dir)
+
     main(args)
