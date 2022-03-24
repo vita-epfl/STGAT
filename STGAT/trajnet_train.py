@@ -35,6 +35,8 @@ parser.add_argument("--loader_num_workers", default=4, type=int)
 parser.add_argument("--obs_len", default=8, type=int)
 parser.add_argument("--pred_len", default=12, type=int)
 parser.add_argument("--skip", default=1, type=int)
+parser.add_argument("--fill_missing_obs", default=1, type=int)
+
 
 parser.add_argument("--seed", type=int, default=72, help="Random seed.")
 parser.add_argument("--batch_size", default=64, type=int)
@@ -200,7 +202,11 @@ def main(args):
                     param_group["lr"] = 5e-3
             training_step = 3
 
-        traj_train_loader = trajnet_loader(train_loader, args, True)          # Wrap Around TrajNet++ loader
+        traj_train_loader = trajnet_loader(
+            train_loader, args, 
+            drop_distant_ped=True, 
+            fill_missing_obs=args.fill_missing_obs
+            ) # Wrap Around TrajNet++ loader
         
         train(args, model, traj_train_loader, optimizer, epoch, training_step, writer)
         
@@ -209,7 +215,7 @@ def main(args):
             ade = validate(args, model, traj_val_loader, epoch, writer)
             is_best = ade < best_ade
             best_ade = min(ade, best_ade)
-
+            
             save_checkpoint(
                 {
                     "epoch": epoch + 1,
