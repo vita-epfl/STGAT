@@ -1,15 +1,8 @@
 @ train:
-	CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name eth_data
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name hotel_data
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name zara1_data
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name zara2_data
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name univ_data
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name colfree_trajdata --obs_len 9
+	CUDA_VISIBLE_DEVICES=0 python trajnet_train.py --dataset_name colfree_trajdata --obs_len 9
 
 @ test:
-	CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name eth_data --num_samples 3
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name hotel_data --num_samples 3
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name zara1_data --num_samples 3
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name zara2_data --num_samples 3
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name univ_data --num_samples 3
-	# CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name colfree_trajdata --num_samples 3 --obs_len 9 
+	CUDA_VISIBLE_DEVICES=0 python trajnet_evaluate_model.py --dataset_name colfree_trajdata --num_samples 3 --obs_len 9 
+
+@ test_trajnet:  # For submission to AICrowd
+	python -m trajnet_evaluator --dataset_name colfree_trajdata --write_only
