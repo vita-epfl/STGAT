@@ -19,16 +19,26 @@ from models import TrajectoryGenerator
 from utils import int_tuple, relative_to_abs
 
 
-def predict_scene(model, paths, args):
-    #############################################################
-    ###### TODO : ACCOUNT FOR SINGLE PEDESTRIANS IN SCENES ######
-    #############################################################
+##########################################################
+###### TODO : MAKE THE DUMMY __CALL__ AS PARTH SAID ######
+##########################################################
+class DummyGAT:
+    def __init__(self, args):
+        self.pred_len = args.pred_len
 
-    # data_loader = [(filename, scene_id, paths)]
+    def __call__(self, obs_traj_rel, obs_traj, seq_start_end, *args):
+        out = torch.ones(self.pred_len, 1, 2)
+        last_obs_pos = obs_traj[-1, 0, :]
+        out[..., :] = last_obs_pos
+        
+        return out.cuda() 
+
+
+def predict_scene(model, paths, args):
     scene_loader = trajnet_loader(
         [(None, None, paths)], 
         args, 
-        drop_distant_ped=True, 
+        drop_distant_ped=False, 
         trajnet_test=True,
         fill_missing_obs=args.fill_missing_obs
         ) 
@@ -47,15 +57,15 @@ def predict_scene(model, paths, args):
         seq_start_end,
     ) = batch
 
-    print(obs_traj.shape)
+    # If there's only one pedestrian, use the dummy model
     if obs_traj.shape[1] == 1:
-        print('ONLY ONE PEDESTRIAN')
+        model_to_use = DummyGAT(args)
+    else:
+        model_to_use = model
 
     multimodal_outputs = {}
     for num_p in range(args.modes):
-        # PREDICT STGAT
-        # Same as in trajnet_evaluate_model.py
-        pred_traj_fake_rel = model(
+        pred_traj_fake_rel = model_to_use(
             obs_traj_rel, obs_traj, seq_start_end, 0, 3
             )
         pred_traj_fake = relative_to_abs(pred_traj_fake_rel, obs_traj[-1])
@@ -63,7 +73,6 @@ def predict_scene(model, paths, args):
 
         output_primary = pred_traj_fake[:, 0]
         output_neighs = pred_traj_fake[:, 1:]
-        # Dictionary of predictions. Each key corresponds to one mode
         multimodal_outputs[num_p] = [output_primary, output_neighs]
 
     return multimodal_outputs
@@ -119,7 +128,7 @@ def get_predictions(args):
     # WARNING: If Model predictions already exist from previous run, 
     # this process SKIPS WRITING
     for model in args.output:
-        model_name = model.split('/')[-1].replace('.pth.tar', '')
+        model_name = model.split('/')[-1].replace('.pkl', '')
         model_name = model_name + '_modes' + str(args.modes)
 
         ## Check if model predictions already exist
@@ -136,20 +145,11 @@ def get_predictions(args):
         model = load_predictor(args)
         goal_flag = False
 
-        ##################
-        print(model)
-        ##################
-
         # Iterate over test datasets
         for dataset in datasets:
             # Load dataset
             dataset_name, scenes, scene_goals = \
                 load_test_datasets(dataset, goal_flag, args)
-
-        #     predict_scene(model, scenes[0][2], args)
-
-        #     break 
-        # break
 
             # Get all predictions in parallel. Faster!
             scenes = tqdm(scenes)
@@ -158,6 +158,10 @@ def get_predictions(args):
                 for (_, _, paths), scene_goal in zip(scenes, scene_goals)
                 )
             
+            # Adding arguments with names that fit the evaluator module
+            # in order to keep it unchanged
+            args.obs_length = args.obs_len
+            args.pred_length = args.pred_len
             # Write all predictions
             write_predictions(pred_list, scenes, model_name, dataset_name, args)
 
@@ -240,12 +244,12 @@ def main():
 
     get_predictions(args)
 
-    # if args.write_only: # For submission to AICrowd.
-    #     print("Predictions written in test_pred folder")
-    #     exit()
+    if args.write_only: # For submission to AICrowd.
+        print("Predictions written in test_pred folder")
+        exit()
 
-    # ## Evaluate using TrajNet++ evaluator
-    # trajnet_evaluate(args)
+    ## Evaluate using TrajNet++ evaluator
+    trajnet_evaluate(args)
     #######################
 
 
