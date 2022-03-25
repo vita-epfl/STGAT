@@ -12,15 +12,62 @@ import numpy as np
 from evaluator.trajnet_evaluator import trajnet_evaluate
 from evaluator.write_utils import load_test_datasets, preprocess_test, write_predictions
 
-# STGAT
-##################
-from models import TrajectoryGenerator
-from utils import int_tuple
-# import ...
-##################
+from trajnet_loader import trajnet_loader
 
-def predict_scene(model, clusters, paths, args):
-    pass
+# STGAT
+from models import TrajectoryGenerator
+from utils import int_tuple, relative_to_abs
+
+
+def predict_scene(model, paths, args):
+    #############################################################
+    ###### TODO : ACCOUNT FOR SINGLE PEDESTRIANS IN SCENES ######
+    #############################################################
+
+    # data_loader = [(filename, scene_id, paths)]
+    scene_loader = trajnet_loader(
+        [(None, None, paths)], 
+        args, 
+        drop_distant_ped=True, 
+        trajnet_test=True,
+        fill_missing_obs=args.fill_missing_obs
+        ) 
+    scene_loader = list(scene_loader)
+    assert len(scene_loader) == 1
+
+    batch = scene_loader[0]
+    batch = [tensor.cuda() for tensor in batch]
+    (
+        obs_traj,
+        pred_traj_gt,
+        obs_traj_rel,
+        pred_traj_gt_rel,
+        non_linear_ped,
+        loss_mask,
+        seq_start_end,
+    ) = batch
+
+    print(obs_traj.shape)
+    if obs_traj.shape[1] == 1:
+        print('ONLY ONE PEDESTRIAN')
+
+    multimodal_outputs = {}
+    for num_p in range(args.modes):
+        # PREDICT STGAT
+        # Same as in trajnet_evaluate_model.py
+        pred_traj_fake_rel = model(
+            obs_traj_rel, obs_traj, seq_start_end, 0, 3
+            )
+        pred_traj_fake = relative_to_abs(pred_traj_fake_rel, obs_traj[-1])
+        pred_traj_fake = pred_traj_fake.detach().cpu().numpy()
+
+        output_primary = pred_traj_fake[:, 0]
+        output_neighs = pred_traj_fake[:, 1:]
+        # Dictionary of predictions. Each key corresponds to one mode
+        multimodal_outputs[num_p] = [output_primary, output_neighs]
+
+    return multimodal_outputs
+
 
 
 def load_predictor(args):
@@ -72,7 +119,7 @@ def get_predictions(args):
     # WARNING: If Model predictions already exist from previous run, 
     # this process SKIPS WRITING
     for model in args.output:
-        model_name = model.split('/')[-1].replace('.pkl', '')
+        model_name = model.split('/')[-1].replace('.pth.tar', '')
         model_name = model_name + '_modes' + str(args.modes)
 
         ## Check if model predictions already exist
@@ -86,8 +133,12 @@ def get_predictions(args):
             continue
 
         print("Model Name: ", model_name)
-        model, clusters = load_predictor(args)
+        model = load_predictor(args)
         goal_flag = False
+
+        ##################
+        print(model)
+        ##################
 
         # Iterate over test datasets
         for dataset in datasets:
@@ -95,10 +146,15 @@ def get_predictions(args):
             dataset_name, scenes, scene_goals = \
                 load_test_datasets(dataset, goal_flag, args)
 
+        #     predict_scene(model, scenes[0][2], args)
+
+        #     break 
+        # break
+
             # Get all predictions in parallel. Faster!
             scenes = tqdm(scenes)
             pred_list = Parallel(n_jobs=1)(
-                delayed(predict_scene)(model, clusters, paths, args)
+                delayed(predict_scene)(model, paths, args)
                 for (_, _, paths), scene_goal in zip(scenes, scene_goals)
                 )
             
@@ -132,12 +188,10 @@ def main():
     parser.add_argument(
         '--modes', default=1, type=int, help='number of modes to predict'
         )
+    parser.add_argument("--batch_size", default=1, type=int)
+    parser.add_argument("--fill_missing_obs", default=1, type=int)
 
     # STGAT
-    parser.add_argument(
-        "--output", default="models", type=str, metavar="PATH",
-        help="path to best checkpoint",
-        )
     parser.add_argument("--noise_dim", default=(16,), type=int_tuple)
     parser.add_argument("--noise_type", default="gaussian")
 
@@ -174,18 +228,17 @@ def main():
     scipy.seterr('ignore')
 
     args.checkpoint = \
-        os.path.join(args.output, args.dataset_name, 'model_best.pth.tar')
-    args.path = os.path.join('datasets', args.dataset_name, 'test_pred')
+        os.path.join('models', args.dataset_name, 'model_best.pth.tar')
+    args.path = os.path.join('datasets', args.dataset_name, 'test_pred/')
+    args.output = [args.checkpoint]
 
     # Writes to Test_pred
     # Does NOT overwrite existing predictions if they already exist ###
     
     #######################
     # DEBUGGING
-    # get_predictions(args)
-    print(args.checkpoint)
-    model = load_predictor(args)
-    print(model)
+
+    get_predictions(args)
 
     # if args.write_only: # For submission to AICrowd.
     #     print("Predictions written in test_pred folder")

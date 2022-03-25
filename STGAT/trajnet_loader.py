@@ -66,7 +66,7 @@ def get_limits_of_missing_intervals(finite_frame_inds, obs_len):
     return limits
 
 
-def fill_missing_observations(pos_scene_raw, obs_len):
+def fill_missing_observations(pos_scene_raw, obs_len, test):
     """
     Performs the following:
         - discards pedestrians that are completely absent in 0 -> obs_len
@@ -81,10 +81,11 @@ def fill_missing_observations(pos_scene_raw, obs_len):
         np.isfinite(pos_scene_raw).all(axis=2)[:obs_len, :].any(axis=0)
     pos_scene = pos_scene_raw[:, peds_are_present_in_obs, :]
 
-    # Discarding pedestrians that have NaNs after obs_len
-    peds_are_absent_after_obs = \
-        np.isfinite(pos_scene).all(axis=2)[obs_len:, :].all(axis=0)
-    pos_scene = pos_scene[:, peds_are_absent_after_obs, :]
+    if not test:
+        # Discarding pedestrians that have NaNs after obs_len
+        peds_are_absent_after_obs = \
+            np.isfinite(pos_scene).all(axis=2)[obs_len:, :].all(axis=0)
+        pos_scene = pos_scene[:, peds_are_absent_after_obs, :]
 
     # Finding indices of finite frames per pedestrian
     finite_frame_inds, finite_ped_inds = \
@@ -111,14 +112,16 @@ def fill_missing_observations(pos_scene_raw, obs_len):
         while i < len(limits_of_missing_ints):
             start_ind, end_ind = \
                 limits_of_missing_ints[i], limits_of_missing_ints[i + 1]
-            # If it's the beginning:
+            # If it's the beginning (i.e. first element is NaN):
             #   - pad with the right limit, else use left
             #   - include start_ind, else exclude it
-            # WARNING: the order of these commands is important due to 
-            # start_ind changing its value
-            padding_ind = end_ind if start_ind == 0 else start_ind
-            start_ind = start_ind if start_ind == 0 else start_ind + 1
-            
+            if start_ind == 0 and not np.isfinite(pos_scene[0, ped_ind]).all():
+                padding_ind = end_ind 
+                start_ind = start_ind 
+            else:
+                padding_ind = start_ind
+                start_ind = start_ind + 1
+
             pos_scene[start_ind:end_ind, ped_ind] = pos_scene[padding_ind, ped_ind]
             i += 2
 
@@ -130,8 +133,13 @@ def trajnet_loader(
     args, 
     drop_distant_ped=False, 
     test=False, 
+    trajnet_test=False,
     fill_missing_obs=False
     ):
+    # Adding the trajnet_test flag to indicate when to ignore the 
+    # minimum of 2 pedestrians per scene constraint
+    if trajnet_test:
+        test = True
     obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel = [], [], [], []
     loss_mask, seq_start_end = [], []
     non_linear_ped = torch.Tensor([]) # dummy
@@ -145,17 +153,12 @@ def trajnet_loader(
         if drop_distant_ped:
             pos_scene = drop_distant(pos_scene)
 
-        ####################
-        # Needed for later; should be moved to the else branch when the minimum
-        # of 2 pedestrians per scene constraint is lifted
-        full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0)
-        ####################
-
         if fill_missing_obs:
-            pos_scene = fill_missing_observations(pos_scene, args.obs_len)
+            pos_scene = fill_missing_observations(pos_scene, args.obs_len, test)
+            full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0)
         else:
             # Removing Partial Tracks. Model cannot account for it !! NaNs in Loss
-            # full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0) ######
+            full_traj = np.isfinite(pos_scene).all(axis=2).all(axis=0)
             pos_scene = pos_scene[:, full_traj]
         
         # Make Rel Scene
@@ -163,8 +166,7 @@ def trajnet_loader(
         vel_scene[1:] = pos_scene[1:] - pos_scene[:-1]
 
         # STGAT Model needs atleast 2 pedestrians per scene.
-        # if sum(full_traj) > 1 and (scene_id in type3_dict[filename]):
-        if sum(full_traj) > 1:
+        if sum(full_traj) > 1 or trajnet_test:
             # Get Obs, Preds attributes
             obs_traj.append(torch.Tensor(pos_scene[:args.obs_len]))
             pred_traj_gt.append(torch.Tensor(pos_scene[-args.pred_len:]))
