@@ -13,25 +13,11 @@ from evaluator.trajnet_evaluator import trajnet_evaluate
 from evaluator.write_utils import load_test_datasets, preprocess_test, write_predictions
 
 from trajnet_loader import trajnet_loader
+from trajnetpp_eval_utils import DummyGAT
 
 # STGAT
 from models import TrajectoryGenerator
 from utils import int_tuple, relative_to_abs
-
-
-##########################################################
-###### TODO : MAKE THE DUMMY __CALL__ AS PARTH SAID ######
-##########################################################
-class DummyGAT:
-    def __init__(self, args):
-        self.pred_len = args.pred_len
-
-    def __call__(self, obs_traj_rel, obs_traj, seq_start_end, *args):
-        out = torch.ones(self.pred_len, 1, 2)
-        last_obs_pos = obs_traj[-1, 0, :]
-        out[..., :] = last_obs_pos
-        
-        return out.cuda() 
 
 
 def predict_scene(model, paths, args):

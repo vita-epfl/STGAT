@@ -19,7 +19,8 @@ from utils import (
 import trajnetplusplustools
 from data_load_utils import prepare_data
 from trajnet_loader import trajnet_loader
-from trajnetpp_eval_utils import trajnet_batch_eval, trajnet_batch_multi_eval
+from trajnetpp_eval_utils import \
+    trajnet_batch_eval, trajnet_batch_multi_eval, DummyGAT
 
 
 parser = argparse.ArgumentParser()
@@ -152,9 +153,15 @@ def evaluate(args, loader, generator):
 
             total_traj += len(seq_start_end)
 
+            if obs_traj.shape[1] == 1:
+                model_to_use = DummyGAT(args)
+            else:
+                model_to_use = generator
+                
             multi_traj_fake = []
             for k in range(args.num_samples):
-                pred_traj_fake_rel = generator(
+
+                pred_traj_fake_rel = model_to_use(
                     obs_traj_rel, obs_traj, seq_start_end, 0, 3
                 )
                 pred_traj_fake_rel = pred_traj_fake_rel[-args.pred_len :]
@@ -191,9 +198,22 @@ def main(args):
     checkpoint = torch.load(args.resume)
     generator = get_generator(checkpoint)
 
-    test_loader, _, _ = prepare_data('datasets/' + args.dataset_name, subset='/test_private/', sample=args.sample)
-    traj_test_loader = trajnet_loader(test_loader, args, test=True)
-    ade, fde, pred_col, gt_col, topk_ade, topk_fde = evaluate(args, traj_test_loader, generator)
+    test_loader, _, _ = prepare_data(
+        'datasets/' + args.dataset_name, 
+        subset='/test_private/', 
+        sample=args.sample
+        )
+
+    traj_test_loader = trajnet_loader(
+        test_loader, args, 
+        trajnet_test=True, 
+        fill_missing_obs=True, 
+        drop_distant_ped=False
+        )
+
+    ade, fde, pred_col, gt_col, topk_ade, topk_fde = \
+        evaluate(args, traj_test_loader, generator)
+    
     print(
         "Dataset: {}, Pred Len: {}, ADE: {:.3f}, FDE: {:.3f}, Pred: {:.3f}, GT: {:.3f}, Topk ADE: {:.3f}, Topk FDE: {:.3f}".format(
             args.dataset_name, args.pred_len, ade, fde, pred_col, gt_col, topk_ade, topk_fde
