@@ -10,7 +10,8 @@ import trajnetplusplustools
 import numpy as np
 
 from evaluator.trajnet_evaluator import trajnet_evaluate
-from evaluator.write_utils import load_test_datasets, preprocess_test, write_predictions
+from evaluator.write_utils import \
+    load_test_datasets, preprocess_test, write_predictions
 
 from trajnet_loader import trajnet_loader
 from trajnetpp_eval_utils import DummyGAT
@@ -21,6 +22,7 @@ from utils import int_tuple, relative_to_abs
 
 
 def predict_scene(model, paths, args):
+    # Load the scene a single-scene data loader (to re-use the function)
     scene_loader = trajnet_loader(
         [(None, None, paths)], 
         args, 
@@ -43,17 +45,20 @@ def predict_scene(model, paths, args):
         seq_start_end,
     ) = batch
 
-    # If there's only one pedestrian, use the dummy model
+    # If there's only one pedestrian, use the Dummy model
     if obs_traj.shape[1] == 1:
         model_to_use = DummyGAT(args)
     else:
         model_to_use = model
 
+    # Get the predictions and save them
     multimodal_outputs = {}
     for num_p in range(args.modes):
         pred_traj_fake_rel = model_to_use(
             obs_traj_rel, obs_traj, seq_start_end, 0, 3
             )
+        
+        # Convert to absolute coordinates
         pred_traj_fake = relative_to_abs(pred_traj_fake_rel, obs_traj[-1])
         pred_traj_fake = pred_traj_fake.detach().cpu().numpy()
 
@@ -137,6 +142,10 @@ def get_predictions(args):
             dataset_name, scenes, scene_goals = \
                 load_test_datasets(dataset, goal_flag, args)
 
+            """
+            INSTEAD OF A LIST OF PATHS WE WANT A DATA LOADER THAT'S THE OUTPUT
+            OF TRAJNET_LOADER AND THEN PASS EACH OF THOSE TO PREDICT_SCENE
+            """
             # Get all predictions in parallel. Faster!
             scenes = tqdm(scenes)
             pred_list = Parallel(n_jobs=1)(
@@ -144,10 +153,6 @@ def get_predictions(args):
                 for (_, _, paths), scene_goal in zip(scenes, scene_goals)
                 )
             
-            # Adding arguments with names that fit the evaluator module
-            # in order to keep it unchanged
-            args.obs_length = args.obs_len
-            args.pred_length = args.pred_len
             # Write all predictions
             write_predictions(pred_list, scenes, model_name, dataset_name, args)
 
@@ -222,21 +227,20 @@ def main():
     args.path = os.path.join('datasets', args.dataset_name, 'test_pred/')
     args.output = [args.checkpoint]
 
+    # Adding arguments with names that fit the evaluator module
+    # in order to keep it unchanged
+    args.obs_length = args.obs_len
+    args.pred_length = args.pred_len
+
     # Writes to Test_pred
     # Does NOT overwrite existing predictions if they already exist ###
-    
-    #######################
-    # DEBUGGING
-
     get_predictions(args)
-
     if args.write_only: # For submission to AICrowd.
         print("Predictions written in test_pred folder")
         exit()
 
     ## Evaluate using TrajNet++ evaluator
     trajnet_evaluate(args)
-    #######################
 
 
 if __name__ == '__main__':

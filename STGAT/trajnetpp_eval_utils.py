@@ -5,6 +5,9 @@ import torch
 ###### TODO : MAKE THE DUMMY __CALL__ AS PARTH SAID ######
 ##########################################################
 class DummyGAT:
+    """
+    Takes a single-pedestrian scene and makes static predictions.
+    """
     def __init__(self, args):
         self.pred_len = args.pred_len
 
