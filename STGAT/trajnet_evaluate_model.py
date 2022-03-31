@@ -36,6 +36,7 @@ parser.add_argument("--skip", default=1, type=int)
 
 parser.add_argument("--seed", type=int, default=72, help="Random seed.")
 parser.add_argument("--batch_size", default=64, type=int)
+parser.add_argument("--fill_missing_obs", default=1, type=int)
 
 parser.add_argument("--noise_dim", default=(16,), type=int_tuple)
 parser.add_argument("--noise_type", default="gaussian")
@@ -211,7 +212,7 @@ def main(args):
     traj_test_loader = trajnet_loader(
         test_loader, args, 
         trajnet_test=True, 
-        fill_missing_obs=True, 
+        fill_missing_obs=args.fill_missing_obs, 
         drop_distant_ped=False
         )
 
