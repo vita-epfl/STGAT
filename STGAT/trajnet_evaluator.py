@@ -21,19 +21,8 @@ from models import TrajectoryGenerator
 from utils import int_tuple, relative_to_abs
 
 
-def predict_scene(model, paths, args):
-    # Load the scene a single-scene data loader (to re-use the function)
-    scene_loader = trajnet_loader(
-        [(None, None, paths)], 
-        args, 
-        drop_distant_ped=False, 
-        trajnet_test=True,
-        fill_missing_obs=args.fill_missing_obs
-        ) 
-    scene_loader = list(scene_loader)
-    assert len(scene_loader) == 1
-
-    batch = scene_loader[0]
+def predict_scene(model, batch, args):
+    assert len(batch) == 7
     batch = [tensor.cuda() for tensor in batch]
     (
         obs_traj,
@@ -142,15 +131,23 @@ def get_predictions(args):
             dataset_name, scenes, scene_goals = \
                 load_test_datasets(dataset, goal_flag, args)
 
-            """
-            INSTEAD OF A LIST OF PATHS WE WANT A DATA LOADER THAT'S THE OUTPUT
-            OF TRAJNET_LOADER AND THEN PASS EACH OF THOSE TO PREDICT_SCENE
-            """
+            # Convert it to a trajnet loader
+            scenes_loader = trajnet_loader(
+                scenes, 
+                args, 
+                drop_distant_ped=False, 
+                trajnet_test=True,
+                fill_missing_obs=args.fill_missing_obs
+                ) 
+
+            # Can be removed; it was useful for debugging
+            scenes_loader = list(scenes_loader)
+
             # Get all predictions in parallel. Faster!
-            scenes = tqdm(scenes)
+            scenes_loader = tqdm(scenes_loader)
             pred_list = Parallel(n_jobs=1)(
-                delayed(predict_scene)(model, paths, args)
-                for (_, _, paths), scene_goal in zip(scenes, scene_goals)
+                delayed(predict_scene)(model, batch, args)
+                for batch in scenes_loader
                 )
             
             # Write all predictions
