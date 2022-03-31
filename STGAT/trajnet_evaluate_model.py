@@ -20,7 +20,8 @@ import trajnetplusplustools
 from data_load_utils import prepare_data
 from trajnet_loader import trajnet_loader
 from trajnetpp_eval_utils import \
-    trajnet_batch_eval, trajnet_batch_multi_eval, DummyGAT
+    trajnet_batch_eval, trajnet_batch_multi_eval
+from helper_models import DummyGAT 
 
 
 parser = argparse.ArgumentParser()
@@ -195,6 +196,9 @@ def evaluate(args, loader, generator):
 
 
 def main(args):
+    args.resume = \
+        os.path.join('models', args.dataset_name, 'model_best.pth.tar')
+
     checkpoint = torch.load(args.resume)
     generator = get_generator(checkpoint)
 
