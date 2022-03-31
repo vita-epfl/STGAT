@@ -14,7 +14,7 @@ from evaluator.write_utils import \
     load_test_datasets, preprocess_test, write_predictions
 
 from trajnet_loader import trajnet_loader
-from trajnetpp_eval_utils import DummyGAT
+from helper_models import DummyGAT
 
 # STGAT
 from models import TrajectoryGenerator
