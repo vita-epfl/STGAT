@@ -133,13 +133,9 @@ def trajnet_loader(
     args, 
     drop_distant_ped=False, 
     test=False, 
-    trajnet_test=False,
+    keep_single_ped_scenes=False,
     fill_missing_obs=False
     ):
-    # Adding the trajnet_test flag to indicate when to ignore the 
-    # minimum of 2 pedestrians per scene constraint
-    if trajnet_test:
-        test = True
     obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel = [], [], [], []
     loss_mask, seq_start_end = [], []
     non_linear_ped = torch.Tensor([]) # dummy
@@ -166,7 +162,7 @@ def trajnet_loader(
         vel_scene[1:] = pos_scene[1:] - pos_scene[:-1]
 
         # STGAT Model needs atleast 2 pedestrians per scene.
-        if sum(full_traj) > 1 or trajnet_test:
+        if sum(full_traj) > 1 or keep_single_ped_scenes:
             # Get Obs, Preds attributes
             obs_traj.append(torch.Tensor(pos_scene[:args.obs_len]))
             pred_traj_gt.append(torch.Tensor(pos_scene[-args.pred_len:]))

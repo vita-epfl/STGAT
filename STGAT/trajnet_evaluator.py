@@ -136,7 +136,8 @@ def get_predictions(args):
                 scenes, 
                 args, 
                 drop_distant_ped=False, 
-                trajnet_test=True,
+                test=True,
+                keep_single_ped_scenes=args.keep_single_ped_scenes,
                 fill_missing_obs=args.fill_missing_obs
                 ) 
 
@@ -182,6 +183,7 @@ def main():
         )
     parser.add_argument("--batch_size", default=1, type=int)
     parser.add_argument("--fill_missing_obs", default=1, type=int)
+    parser.add_argument("--keep_single_ped_scenes", default=1, type=int)
 
     # STGAT
     parser.add_argument("--noise_dim", default=(16,), type=int_tuple)
