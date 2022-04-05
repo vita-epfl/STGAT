@@ -157,7 +157,7 @@ def evaluate(args, loader, generator):
             total_traj += len(seq_start_end)
 
             if obs_traj.shape[1] == 1:
-                model_to_use = DummyGAT(args)
+                model_to_use = DummyGAT(generator, args)
             else:
                 model_to_use = generator
                 

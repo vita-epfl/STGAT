@@ -36,7 +36,7 @@ def predict_scene(model, batch, args):
 
     # If there's only one pedestrian, use the Dummy model
     if obs_traj.shape[1] == 1:
-        model_to_use = DummyGAT(args)
+        model_to_use = DummyGAT(model, args)
     else:
         model_to_use = model
 
