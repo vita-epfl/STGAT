@@ -35,7 +35,8 @@ parser.add_argument("--loader_num_workers", default=4, type=int)
 parser.add_argument("--obs_len", default=8, type=int)
 parser.add_argument("--pred_len", default=12, type=int)
 parser.add_argument("--skip", default=1, type=int)
-parser.add_argument("--fill_missing_obs", default=1, type=int)
+parser.add_argument("--fill_missing_obs", default=0, type=int)
+parser.add_argument("--keep_single_ped_scenes", default=0, type=int)
 
 
 parser.add_argument("--seed", type=int, default=72, help="Random seed.")
@@ -205,7 +206,8 @@ def main(args):
         traj_train_loader = trajnet_loader(
             train_loader, args, 
             drop_distant_ped=True, 
-            fill_missing_obs=args.fill_missing_obs
+            fill_missing_obs=args.fill_missing_obs,
+            keep_single_ped_scenes=args.keep_single_ped_scenes
             ) # Wrap Around TrajNet++ loader
         
         train(args, model, traj_train_loader, optimizer, epoch, training_step, writer)
