@@ -121,16 +121,10 @@ def main(args):
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_num
 
-    ## TrajNet++ Edit ################################################################################################
     logging.info("Initializing datasets")
-    # train_path = get_dset_path(args.dataset_name, "train")
-    # val_path = get_dset_path(args.dataset_name, "test")
 
-    # logging.info("Initializing train dataset")
-    # train_dset, train_loader = data_loader(args, train_path)
-    # logging.info("Initializing val dataset")
-    # _, val_loader = data_loader(args, val_path)
     print("Dataset: ", args.dataset_name)
+    # Construct the datasets
     train_loader, _, _ = prepare_data(
         'datasets/' + args.dataset_name, subset='/train/', sample=args.sample
         )
@@ -138,8 +132,23 @@ def main(args):
         'datasets/' + args.dataset_name, subset='/val/', sample=args.sample
         )
 
-    ## TrajNet++ Edit ################################################################################################
+    # Convert datasets to trajnet loaders
+    traj_train_loader = trajnet_loader(
+        train_loader, args, 
+        drop_distant_ped=True, 
+        fill_missing_obs=args.fill_missing_obs,
+        keep_single_ped_scenes=args.keep_single_ped_scenes
+        ) 
+    traj_train_loader = list(traj_train_loader)
 
+    traj_val_loader = trajnet_loader(
+        val_loader, args,
+        drop_distant_ped=True, 
+        fill_missing_obs=args.fill_missing_obs,
+        keep_single_ped_scenes=args.keep_single_ped_scenes
+        )   
+    traj_val_loader = list(traj_val_loader)
+    
     writer = SummaryWriter()
 
     n_units = (
@@ -202,18 +211,12 @@ def main(args):
                 for param_group in optimizer.param_groups:
                     param_group["lr"] = 5e-3
             training_step = 3
-
-        traj_train_loader = trajnet_loader(
-            train_loader, args, 
-            drop_distant_ped=True, 
-            fill_missing_obs=args.fill_missing_obs,
-            keep_single_ped_scenes=args.keep_single_ped_scenes
-            ) # Wrap Around TrajNet++ loader
         
+        # Run training
         train(args, model, traj_train_loader, optimizer, epoch, training_step, writer)
         
         if training_step == 3:
-            traj_val_loader =  trajnet_loader(val_loader, args)          # Wrap Around TrajNet++ loader
+            # Run validation
             ade = validate(args, model, traj_val_loader, epoch, writer)
             is_best = ade < best_ade
             best_ade = min(ade, best_ade)
