@@ -41,7 +41,7 @@ parser.add_argument("--keep_single_ped_scenes", default=0, type=int)
 
 parser.add_argument("--seed", type=int, default=72, help="Random seed.")
 parser.add_argument("--batch_size", default=64, type=int)
-parser.add_argument("--num_epochs", default=100, type=int)
+parser.add_argument("--num_epochs", default=300, type=int)
 
 parser.add_argument("--noise_dim", default=(16,), type=int_tuple)
 parser.add_argument("--noise_type", default="gaussian")
@@ -202,18 +202,21 @@ def main(args):
 
     training_step = 1
     for epoch in range(args.start_epoch, args.num_epochs + 1):
-        if epoch < 30:
+        if epoch < 150:
             training_step = 1
-        elif epoch < 60:
+        elif epoch < 250:
             training_step = 2
         else:
-            if epoch == 60:
+            if epoch == 250:
                 for param_group in optimizer.param_groups:
                     param_group["lr"] = 5e-3
             training_step = 3
         
         # Run training
-        train(args, model, traj_train_loader, optimizer, epoch, training_step, writer)
+        train(
+            args, model, traj_train_loader, optimizer, 
+            epoch, training_step, writer
+            )
         
         if training_step == 3:
             # Run validation
